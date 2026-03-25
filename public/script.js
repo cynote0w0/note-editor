@@ -10,13 +10,44 @@ const toastMessage = document.getElementById('toast-message');
 const fileList = document.getElementById('file-list');
 const newFileBtn = document.getElementById('new-file-btn');
 const moveLoader = document.getElementById('move-loader');
+const logoutBtn = document.getElementById('logout-btn');
 
 let draggedFilePath = null;
 let isUnsaved = false;
 let currentLoadedFile = null;
 
-// Initialize Editor with some content
-const initialContent = `# Welcome to Markdown Hub
+// --- Auth helpers ---
+function redirectToLogin() {
+  window.location.href = '/login.html';
+}
+
+// Intercept all 401 responses
+async function authFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    redirectToLogin();
+    return res;
+  }
+  return res;
+}
+
+// On page load: verify session is still valid, then initialize app
+(async function initApp() {
+  try {
+    const res = await fetch('/api/check-auth');
+    if (!res.ok) {
+      redirectToLogin();
+      return; // stop — don't initialize the rest of the app
+    }
+  } catch (e) {
+    redirectToLogin();
+    return;
+  }
+
+  // ---- Only runs if authenticated ----
+
+  // Initialize Editor with some content
+  const initialContent = `# Welcome to Markdown Hub
 
 Enjoy editing with real-time preview and one-click GitHub sync.
 
@@ -43,9 +74,20 @@ const greet = () => {
 > This editor uses Marked.js and a Node.js backend to push directly to your repository.
 `;
 
-editor.value = initialContent;
-updatePreview();
-fetchFiles();
+  editor.value = initialContent;
+  updatePreview();
+  fetchFiles();
+
+  // Logout button
+  logoutBtn.addEventListener('click', async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+    } finally {
+      redirectToLogin();
+    }
+  });
+})();
+
 
 // Event Listeners
 newFileBtn.addEventListener('click', () => {
@@ -133,7 +175,7 @@ async function saveToGitHub() {
   `;
 
   try {
-    const response = await fetch('/api/save', {
+    const response = await authFetch('/api/save', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -166,7 +208,7 @@ async function saveToGitHub() {
 
 async function fetchFiles() {
   try {
-    const res = await fetch('/api/files');
+    const res = await authFetch('/api/files');
     const data = await res.json();
     renderFileList(data.files || []);
   } catch (err) {
@@ -242,7 +284,7 @@ async function handleDrop(e, targetFolderPath) {
   
   moveLoader.classList.add('active');
   try {
-    const res = await fetch('/api/move', {
+      const res = await authFetch('/api/move', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -371,7 +413,7 @@ async function loadFile(filename) {
   fileList.innerHTML = '<div class="file-list-loader">Loading...</div>';
   
   try {
-    const res = await fetch(`/api/file?filename=${encodeURIComponent(filename)}`);
+    const res = await authFetch(`/api/file?filename=${encodeURIComponent(filename)}`);
     const data = await res.json();
     
     if (res.ok) {
@@ -408,7 +450,7 @@ async function deleteFile(filename) {
   }
   
   try {
-    const res = await fetch(`/api/file?filename=${encodeURIComponent(filename)}`, {
+    const res = await authFetch(`/api/file?filename=${encodeURIComponent(filename)}`, {
       method: 'DELETE'
     });
     const data = await res.json();

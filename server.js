@@ -3,18 +3,81 @@ const express = require('express');
 const { Octokit } = require('@octokit/rest');
 const cors = require('cors');
 const path = require('path');
+const session = require('express-session');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Session configuration (2-hour expiry)
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'fallback_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    maxAge: 2 * 60 * 60 * 1000 // 2 hours in milliseconds
+  }
+}));
+
+// Serve login page directly (no auth required)
+app.get('/login.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Auth middleware
+function requireAuth(req, res, next) {
+  if (req.session && req.session.authenticated) {
+    return next();
+  }
+  return res.status(401).json({ error: 'Unauthorized' });
+}
+
+// Login route (no auth required)
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminPassword) {
+    return res.status(500).json({ error: 'ADMIN_PASSWORD not configured in .env' });
+  }
+
+  if (password === adminPassword) {
+    req.session.authenticated = true;
+    return res.json({ success: true });
+  } else {
+    return res.status(401).json({ error: '密码错误' });
+  }
+});
+
+// Logout route
+app.post('/api/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
+});
+
+// Check auth status
+app.get('/api/check-auth', (req, res) => {
+  if (req.session && req.session.authenticated) {
+    return res.json({ authenticated: true });
+  }
+  return res.status(401).json({ authenticated: false });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Initialize Octokit
 const octokit = new Octokit({
   auth: process.env.GITHUB_TOKEN
 });
+
 
 // Helper function to update _sidebar.md linkage
 // If isDelete is true, it only removes the link for the file.
@@ -167,7 +230,7 @@ async function refreshSidebarLink(octokit, owner, repo, filename, title, isDelet
   }
 }
 
-app.post('/api/save', async (req, res) => {
+app.post('/api/save', requireAuth, async (req, res) => {
   const { content, filename, title, updateSidebar } = req.body;
   const owner = process.env.REPO_OWNER;
   const repo = process.env.REPO_NAME;
@@ -236,7 +299,7 @@ app.post('/api/save', async (req, res) => {
   }
 });
 
-app.post('/api/move', async (req, res) => {
+app.post('/api/move', requireAuth, async (req, res) => {
   const { oldPath, newPath, title } = req.body;
   const owner = process.env.REPO_OWNER;
   const repo = process.env.REPO_NAME;
@@ -310,7 +373,7 @@ app.post('/api/move', async (req, res) => {
 });
 
 // Get list of files
-app.get('/api/files', async (req, res) => {
+app.get('/api/files', requireAuth, async (req, res) => {
   const owner = process.env.REPO_OWNER;
   const repo = process.env.REPO_NAME;
   const basePath = process.env.FILE_PATH || '';
@@ -362,7 +425,7 @@ app.get('/api/files', async (req, res) => {
 });
 
 // Get single file content
-app.get('/api/file', async (req, res) => {
+app.get('/api/file', requireAuth, async (req, res) => {
   const { filename } = req.query;
   const owner = process.env.REPO_OWNER;
   const repo = process.env.REPO_NAME;
@@ -393,7 +456,7 @@ app.get('/api/file', async (req, res) => {
 });
 
 // Delete file
-app.delete('/api/file', async (req, res) => {
+app.delete('/api/file', requireAuth, async (req, res) => {
   const _filename = req.query.filename || req.body.filename;
   const owner = process.env.REPO_OWNER;
   const repo = process.env.REPO_NAME;
