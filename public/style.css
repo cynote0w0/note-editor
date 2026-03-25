@@ -11,6 +11,12 @@
   --error: #ef4444;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -427,3 +433,87 @@ textarea#editor::placeholder {
 
 .toast.success { border-left: 4px solid var(--success); }
 .toast.error { border-left: 4px solid var(--error); }
+
+/* File Tree & Drag-and-drop Styles */
+.file-tree-root {
+  display: flex;
+  flex-direction: column;
+}
+
+.folder {
+  margin-top: 4px;
+}
+
+.folder-name {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: background 0.2s ease, border 0.1s ease;
+  user-select: none;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.folder-name:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.folder-name svg {
+  margin-right: 8px;
+  transition: transform 0.2s ease;
+}
+
+.folder.open > .folder-name svg {
+  transform: rotate(90deg);
+}
+
+.folder-contents {
+  display: none;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  margin-left: 18px;
+}
+
+.folder.open > .folder-contents {
+  display: block;
+}
+
+.file-item[draggable="true"] {
+  cursor: grab;
+}
+
+.file-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Drop targets */
+.folder-name.drag-over, .file-tree-root.drag-over {
+  background: rgba(99, 102, 241, 0.2) !important;
+  outline: 1px dashed #6366f1;
+}
+
+.full-screen-loader {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+}
+.full-screen-loader.active {
+  display: flex;
+}
+
+.file-item.dragging {
+  opacity: 0.4;
+  border: 1px dashed #6366f1;
+}

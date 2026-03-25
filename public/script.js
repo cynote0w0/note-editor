@@ -9,7 +9,9 @@ const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toast-message');
 const fileList = document.getElementById('file-list');
 const newFileBtn = document.getElementById('new-file-btn');
+const moveLoader = document.getElementById('move-loader');
 
+let draggedFilePath = null;
 let isUnsaved = false;
 let currentLoadedFile = null;
 
@@ -173,22 +175,156 @@ async function fetchFiles() {
   }
 }
 
-function renderFileList(files) {
-  if (files.length === 0) {
-    fileList.innerHTML = '<div class="file-list-loader">No markdown files found</div>';
-    return;
-  }
+function buildTree(files) {
+  const root = { children: {}, files: [] };
   
-  fileList.innerHTML = '';
   files.forEach(file => {
-    const item = document.createElement('div');
-    item.className = 'file-item';
-    if (file.name === currentLoadedFile) item.classList.add('active');
+    const parts = file.path.split('/');
+    if (parts.length === 1) {
+      root.files.push(file);
+    } else {
+      let currentDir = root;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const dirName = parts[i];
+        if (!currentDir.children[dirName]) {
+          currentDir.children[dirName] = { children: {}, files: [] };
+        }
+        currentDir = currentDir.children[dirName];
+      }
+      currentDir.files.push(file);
+    }
+  });
+  
+  return root;
+}
+
+function handleDragStart(e, filePath) {
+  draggedFilePath = filePath;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', filePath);
+  setTimeout(() => e.target.classList.add('dragging'), 0);
+}
+
+function handleDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+  // Only remove highlight when leaving to an element OUTSIDE this drop-zone
+  if (e.currentTarget.contains(e.relatedTarget)) return;
+  e.currentTarget.classList.remove('drag-over');
+}
+
+async function handleDrop(e, targetFolderPath) {
+  e.preventDefault();
+  e.stopPropagation();
+  // Cache currentTarget BEFORE any await — the browser nulls it out after sync return
+  const dropTarget = e.currentTarget;
+  if (dropTarget) dropTarget.classList.remove('drag-over');
+  
+  const filePath = draggedFilePath || e.dataTransfer.getData('text/plain');
+  if (!filePath) return;
+  
+  const fileName = filePath.split('/').pop();
+  const newPath = targetFolderPath ? `${targetFolderPath}/${fileName}` : fileName;
+  
+  if (filePath === newPath) return; // Dropped in same folder
+  
+  if (!confirm(`Move "${fileName}" to "${targetFolderPath ? '📁 ' + targetFolderPath : 'root'}"?`)) return;
+  
+  moveLoader.classList.add('active');
+  try {
+    const res = await fetch('/api/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        oldPath: filePath, 
+        newPath: newPath,
+        title: titleInput.value.trim() || null
+      })
+    });
     
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'file-item-name';
-    nameSpan.textContent = file.name;
-    nameSpan.title = file.name;
+    if (res.ok) {
+      showToast('File moved successfully', 'success');
+      if (currentLoadedFile === filePath) {
+        currentLoadedFile = newPath;
+        filenameInput.value = newPath;
+      }
+      await fetchFiles();
+    } else {
+      const data = await res.json();
+      showToast(data.error || 'Failed to move', 'error');
+    }
+  } catch(err) {
+    console.error(err);
+    showToast('Failed to move file', 'error');
+  } finally {
+    moveLoader.classList.remove('active');
+    draggedFilePath = null;
+  }
+}
+
+function renderTree(node, container, currentPath = '') {
+  container.addEventListener('dragover', handleDragOver);
+  container.addEventListener('dragleave', handleDragLeave);
+  container.addEventListener('drop', (e) => handleDrop(e, currentPath));
+
+  const dirNames = Object.keys(node.children).sort();
+  dirNames.forEach(dirName => {
+    const folderPath = currentPath ? `${currentPath}/${dirName}` : dirName;
+    
+    const folderDiv = document.createElement('div');
+    folderDiv.className = 'folder open';
+    
+    const folderHeader = document.createElement('div');
+    folderHeader.className = 'folder-name';
+    folderHeader.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg> 📁 ${dirName}`;
+    
+    folderHeader.addEventListener('click', (e) => {
+      e.stopPropagation();
+      folderDiv.classList.toggle('open');
+    });
+    
+    folderHeader.addEventListener('dragover', handleDragOver);
+    folderHeader.addEventListener('dragleave', handleDragLeave);
+    folderHeader.addEventListener('drop', (e) => {
+      e.stopPropagation(); 
+      handleDrop(e, folderPath);
+    });
+
+    const folderContents = document.createElement('div');
+    folderContents.className = 'folder-contents';
+    
+    renderTree(node.children[dirName], folderContents, folderPath);
+    
+    folderDiv.appendChild(folderHeader);
+    folderDiv.appendChild(folderContents);
+    container.appendChild(folderDiv);
+  });
+  
+  const files = node.files.sort((a,b) => a.name.localeCompare(b.name));
+  files.forEach(file => {
+    const li = document.createElement('div');
+    li.className = 'file-item';
+    li.draggable = true;
+    
+    if (currentLoadedFile === file.path || currentLoadedFile === file.name) {
+      li.classList.add('active');
+    }
+    
+    li.dataset.path = file.path;
+    
+    const span = document.createElement('span');
+    span.className = 'file-item-name';
+    span.textContent = `📄 ${file.name}`;
     
     const delBtn = document.createElement('button');
     delBtn.className = 'delete-btn';
@@ -197,17 +333,34 @@ function renderFileList(files) {
     
     delBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      deleteFile(file.name);
+      deleteFile(file.path);
     });
     
-    item.addEventListener('click', () => {
-      loadFile(file.name);
+    li.addEventListener('click', (e) => {
+      e.stopPropagation();
+      loadFile(file.path);
     });
     
-    item.appendChild(nameSpan);
-    item.appendChild(delBtn);
-    fileList.appendChild(item);
+    li.addEventListener('dragstart', (e) => { handleDragStart(e, file.path); });
+    li.addEventListener('dragend', handleDragEnd);
+
+    li.appendChild(span);
+    li.appendChild(delBtn);
+    container.appendChild(li);
   });
+}
+
+function renderFileList(files) {
+  if (files.length === 0) {
+    fileList.innerHTML = '<div class="file-list-loader">No markdown files found</div>';
+    return;
+  }
+  
+  fileList.innerHTML = '';
+  fileList.className = 'file-list file-tree-root';
+  
+  const tree = buildTree(files);
+  renderTree(tree, fileList, '');
 }
 
 async function loadFile(filename) {
