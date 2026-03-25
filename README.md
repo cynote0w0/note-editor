@@ -40,6 +40,12 @@ FILE_PATH=
 
 # Web 应用运行的本地端口（默认 3000）
 PORT=3000
+
+# 管理员密码
+ADMIN_PASSWORD=password
+
+# 会话密钥
+SESSION_SECRET=change_this_to_a_random_secret_string
 ```
 
 > **获取 GitHub Token 指南**：登录 GitHub -> Settings -> Developer Settings -> Personal access tokens (建议使用 Fine-grained tokens) -> Generate new token。选择你的目标仓库，并确保为其开启 **Contents** 的 **Read and write** 权限。
