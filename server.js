@@ -3,49 +3,52 @@ const express = require('express');
 const { Octokit } = require('@octokit/rest');
 const cors = require('cors');
 const path = require('path');
-const session = require('express-session');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.SESSION_SECRET || 'fallback_jwt_secret';
+const JWT_EXPIRY = '2h';
+const COOKIE_NAME = 'auth_token';
 
-app.use(cors());
+app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
-
-// Session configuration (2-hour expiry)
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback_secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    maxAge: 2 * 60 * 60 * 1000 // 2 hours in milliseconds
-  }
-}));
+app.use(cookieParser());
 
 // Serve login page directly (no auth required)
 app.get('/login.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// Auth middleware
+// Auth middleware — verifies JWT from cookie
 function requireAuth(req, res, next) {
-  if (req.session && req.session.authenticated) {
+  const token = req.cookies[COOKIE_NAME];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    jwt.verify(token, JWT_SECRET);
     return next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Session expired' });
   }
-  return res.status(401).json({ error: 'Unauthorized' });
 }
 
-// Login route (no auth required)
+// Login route
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!adminPassword) {
-    return res.status(500).json({ error: 'ADMIN_PASSWORD not configured in .env' });
+    return res.status(500).json({ error: 'ADMIN_PASSWORD not configured' });
   }
 
   if (password === adminPassword) {
-    req.session.authenticated = true;
+    const token = jwt.sign({ authenticated: true }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+    res.cookie(COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 2 * 60 * 60 * 1000 // 2 hours
+    });
     return res.json({ success: true });
   } else {
     return res.status(401).json({ error: '密码错误' });
@@ -54,21 +57,20 @@ app.post('/api/login', (req, res) => {
 
 // Logout route
 app.post('/api/logout', (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Logout failed' });
-    }
-    res.clearCookie('connect.sid');
-    res.json({ success: true });
-  });
+  res.clearCookie(COOKIE_NAME);
+  res.json({ success: true });
 });
 
 // Check auth status
 app.get('/api/check-auth', (req, res) => {
-  if (req.session && req.session.authenticated) {
+  const token = req.cookies[COOKIE_NAME];
+  if (!token) return res.status(401).json({ authenticated: false });
+  try {
+    jwt.verify(token, JWT_SECRET);
     return res.json({ authenticated: true });
+  } catch (err) {
+    return res.status(401).json({ authenticated: false });
   }
-  return res.status(401).json({ authenticated: false });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -505,6 +507,11 @@ app.delete('/api/file', requireAuth, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running at http://localhost:${PORT}`);
-});
+// Local dev: listen on port; Vercel: export app as serverless function
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server is running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
