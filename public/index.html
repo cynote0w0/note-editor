@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-width=1.0">
+  <title>Markdown Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- Marked.js for markdown parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Highlight.js for code block highlighting in preview -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <header class="glass-nav">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M16 13H8"></path><path d="M16 17H8"></path><path d="M10 9H8"></path></svg>
+        <span>Markdown Hub</span>
+      </div>
+      <div class="actions">
+        <span id="status-text">All changes saved</span>
+        <div class="sidebar-options">
+          <label class="checkbox-label" title="Automatically add this article to Docsify sidebar">
+            <input type="checkbox" id="update-sidebar-checkbox" checked />
+            Docsify
+          </label>
+        </div>
+        <input type="text" id="title-input" class="filename-input" placeholder="Article Title..." />
+        <input type="text" id="filename-input" class="filename-input" placeholder="filename.md" value="README.md" />
+        <button id="save-btn" class="btn-primary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          Save to GitHub
+        </button>
+      </div>
+    </header>
+
+    <main class="split-view">
+      <!-- Sidebar / File Explorer -->
+      <aside class="pane file-explorer-pane">
+        <div class="explorer-header">
+          <h3>Files</h3>
+          <button id="new-file-btn" class="icon-btn" title="Create New File">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
+        </div>
+        <div class="file-list" id="file-list">
+          <div class="file-list-loader">Loading...</div>
+        </div>
+      </aside>
+
+      <!-- Editor -->
+      <div class="pane editor-pane">
+        <textarea id="editor" spellcheck="false" placeholder="Write your markdown here..."></textarea>
+      </div>
+      
+      <!-- Preview -->
+      <div class="pane preview-pane">
+        <div id="preview" class="markdown-body"></div>
+      </div>
+    </main>
+  </div>
+  
+  <!-- Notification Toast -->
+  <div id="toast" class="toast hidden">
+    <div class="toast-content" id="toast-message">Saved successfully!</div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
